@@ -4,7 +4,7 @@
   "description": "Digital Encryption and Security for U",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha"
   },
   "keywords": [
     "chat",
@@ -13,5 +13,15 @@
     "desu"
   ],
   "author": "Sean Farrell",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "chai": "^4.3.7",
+    "mocha": "^10.2.0"
+  },
+  "dependencies": {
+    "lokijs": "^1.5.12",
+    "morgan": "^1.10.0",
+    "node-fetch": "^3.3.1",
+    "restify": "^11.1.0"
+  }
 }
