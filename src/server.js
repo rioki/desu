@@ -10,13 +10,14 @@ let defaults = {
   storage: '.server-data',
   port: 9350,
   prefix: '',
+  lifetime: 604800000, // one week
   name: 'A Desu Server',
   icon: 'https://www.rioki.org/favicon.ico'
 };
 
 function trimLokiMeta(element) {
-  element.id = e['$loki'];
-  delete element['$loki'];
+  element.id = element.$loki;
+  delete element.$loki;
   delete element.meta;
   return element;
 }
@@ -32,19 +33,25 @@ class Storage {
   }
 
   addMessage(message) {
+    message.received = Date.now();
+
     let messages = this._getMessagesCollection();
-    messages.insert({
-      received: Date.now(),
-      message: message
-    });
+    let result = messages.insert(message);
+    return {
+      id: result.$loki,
+      submitted: true,
+      received: message.received
+    }
   }
 
   getMessages(options) {
-    let limit  = options.limit ? options.limit : 100;
-    let offset = options.offset ? options.offset : 0;
+    let limit   = options.limit ? options.limit : 100;
+    let offset  = options.offset ? options.offset : 0;
+    let minTime = options.minTime ? options.minTime : 0;
 
     let messages = this._getMessagesCollection();
     return messages.chain()
+                   .find({received: {'$gte': minTime}})
                    .simplesort('received')
                    .offset(offset)
                    .limit(limit)
@@ -52,10 +59,22 @@ class Storage {
                    .map(trimLokiMeta);
   }
 
+  prune(maxTime) {
+    let messages = this._getMessagesCollection();
+    return messages.chain()
+                   .find({received: {'$lt': maxTime}})
+                   .remove();
+  }
+
+  // This is used to reset before unit tests.
+  reset() {
+    this.loki.removeCollection('messages');
+  }
+
   _getMessagesCollection() {
-    let servers = this.store.getCollection('messages');
+    let servers = this.loki.getCollection('messages');
     if (!servers) {
-      servers = this.store.addCollection('messages', { indices: ['received'] });
+      servers = this.loki.addCollection('messages', { indices: ['received'] });
     }
     return servers;
   }
@@ -82,26 +101,40 @@ class Server extends EventEmitter {
           version: version,
           name: this.options.name,
           icon: this.options.icon,
+          lifetime: this.options.lifetime,
           time: Date.now()
         });
         next();
       });
 
       this.server.post(prefix + '/', (req, res, next) => {
-        this.storage.addMessage(req.body);
+        res.json(this.storage.addMessage(req.body));
+        next();
+      });
+
+      this.server.get(prefix + '/', (req, res, next) => {
+        let messages = this.storage.getMessages(req.query);
+        res.json({
+          messages
+        });
         next();
       });
 
       this.server.listen(this.options.port, () => {
         this.emit('ready');
       });
+
+      this.pruneInterval = setInterval(() => {
+        this.storage.prune(Date.now() - this.options.lifetime);
+      }, 30000);
     }
 
-    this.storage = new Storage(options.storage, onDbReady)
+    this.storage = new Storage(this.options.storage, onDbReady)
   }
 
   close() {
     return new Promise((resolve) => {
+      clearInterval(this.pruneInterval);
       this.server.close();
       this.once('close', resolve);
     });

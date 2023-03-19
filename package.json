@@ -4,7 +4,7 @@
   "description": "Digital Encryption and Security for U",
   "main": "index.js",
   "scripts": {
-    "test": "mocha"
+    "test": "mocha --exit"
   },
   "keywords": [
     "chat",
